@@ -87,6 +87,8 @@ describe 'horizon' do
           :django_session_engine   => 'django.contrib.sessions.backends.cache',
           :keystone_default_role   => 'SwiftOperator',
           :keystone_url            => 'https://keystone.example.com:4682',
+          :log_handler             => 'syslog',
+          :log_level               => 'DEBUG',
           :openstack_endpoint_type => 'internalURL',
           :secondary_endpoint_type => 'ANY-VALUE',
           :django_debug            => true,
@@ -124,6 +126,8 @@ describe 'horizon' do
           'OPENSTACK_ENDPOINT_TYPE = "internalURL"',
           'SECONDARY_ENDPOINT_TYPE = "ANY-VALUE"',
           'API_RESULT_LIMIT = 4682',
+          "            'level': 'DEBUG',",
+          "            'handlers': ['syslog'],",
           'COMPRESS_OFFLINE = False',
           "FILE_UPLOAD_TEMP_DIR = '/var/spool/horizon'"
         ])
@@ -327,6 +331,12 @@ describe 'horizon' do
     end
 
     it_behaves_like 'horizon'
+
+    it 'sets WEBROOT in local_settings.py' do
+      verify_concat_fragment_contents(catalogue, 'local_settings.py', [
+        "WEBROOT = '/dashboard/'",
+      ])
+    end
   end
 
   context 'on Debian platforms' do
@@ -344,5 +354,11 @@ describe 'horizon' do
     end
 
     it_behaves_like 'horizon'
+
+    it 'sets WEBROOT in local_settings.py' do
+      verify_concat_fragment_contents(catalogue, 'local_settings.py', [
+        "WEBROOT = '/horizon/'",
+      ])
+    end
   end
 end
