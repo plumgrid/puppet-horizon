@@ -28,21 +28,33 @@ describe 'horizon' do
           is_expected.to contain_package('python-lesscpy').with_ensure('present')
           is_expected.to contain_package('horizon').with(
             :ensure => 'present',
-            :tag    => 'openstack'
+            :tag    => ['openstack', 'horizon-package'],
           )
       }
-      it { is_expected.to contain_exec('refresh_horizon_django_cache').with({
+      it {
+        if facts[:os_package_type] == 'rpm'
+          is_expected.to contain_exec('refresh_horizon_django_cache').with({
           :command     => '/usr/share/openstack-dashboard/manage.py collectstatic --noinput --clear && /usr/share/openstack-dashboard/manage.py compress --force',
           :refreshonly => true,
-      })}
-      it { is_expected.to contain_concat(platforms_params[:config_file]).that_notifies('Exec[refresh_horizon_django_cache]') }
+          })
+        else
+          is_expected.to_not contain_exec('refresh_horizon_django_cache')
+        end
+      }
+      it {
+        if facts[:os_package_type] == 'rpm'
+          is_expected.to contain_concat(platforms_params[:config_file]).that_notifies('Exec[refresh_horizon_django_cache]')
+        else
+          is_expected.to_not contain_concat(platforms_params[:config_file]).that_notifies('Exec[refresh_horizon_django_cache]')
+        end
+      }
 
       it 'configures apache' do
         is_expected.to contain_class('horizon::wsgi::apache').with({
-          :servername   => 'some.host.tld',
-          :listen_ssl   => false,
-          :servername   => 'some.host.tld',
-          :extra_params => {},
+          :servername    => 'some.host.tld',
+          :listen_ssl    => false,
+          :extra_params  => {},
+          :redirect_type => 'permanent',
         })
       end
 
@@ -55,13 +67,13 @@ describe 'horizon' do
           'OPENSTACK_KEYSTONE_DEFAULT_ROLE = "_member_"',
           "    'can_set_mount_point': True,",
           "    'can_set_password': False,",
-          "    'enable_lb': False,",
+          "    'enable_distributed_router': False,",
           "    'enable_firewall': False,",
+          "    'enable_ha_router': False,",
+          "    'enable_lb': False,",
           "    'enable_quotas': True,",
           "    'enable_security_group': True,",
           "    'enable_vpn': False,",
-          "    'enable_distributed_router': False,",
-          "    'enable_ha_router': False,",
           'API_RESULT_LIMIT = 1000',
           "LOGIN_URL = '#{platforms_params[:root_url]}/auth/login/'",
           "LOGOUT_URL = '#{platforms_params[:root_url]}/auth/logout/'",
@@ -83,23 +95,30 @@ describe 'horizon' do
     context 'with overridden parameters' do
       before do
         params.merge!({
-          :cache_server_ip         => '10.0.0.1',
-          :django_session_engine   => 'django.contrib.sessions.backends.cache',
-          :keystone_default_role   => 'SwiftOperator',
-          :keystone_url            => 'https://keystone.example.com:4682',
-          :log_handler             => 'syslog',
-          :log_level               => 'DEBUG',
-          :openstack_endpoint_type => 'internalURL',
-          :secondary_endpoint_type => 'ANY-VALUE',
-          :django_debug            => true,
-          :api_result_limit        => 4682,
-          :compress_offline        => false,
-          :hypervisor_options      => {'can_set_mount_point' => false, 'can_set_password' => true },
-          :cinder_options          => {'enable_backup' => true },
-          :neutron_options         => {'enable_lb' => true, 'enable_firewall' => true, 'enable_quotas' => false, 'enable_security_group' => false, 'enable_vpn' => true,
-                                       'enable_distributed_router' => false, 'enable_ha_router' => false, 'profile_support' => 'cisco', },
-          :file_upload_temp_dir    => '/var/spool/horizon',
-          :secure_cookies          => true
+          :cache_backend                => 'horizon.backends.memcached.HorizonMemcached',
+          :cache_options                => {'SOCKET_TIMEOUT' => 1,'SERVER_RETRIES' => 1,'DEAD_RETRY' => 1},
+          :cache_server_ip              => '10.0.0.1',
+          :django_session_engine        => 'django.contrib.sessions.backends.cache',
+          :keystone_default_role        => 'SwiftOperator',
+          :keystone_url                 => 'https://keystone.example.com:4682',
+          :ssl_no_verify                => true,
+          :log_handler                  => 'syslog',
+          :log_level                    => 'DEBUG',
+          :openstack_endpoint_type      => 'internalURL',
+          :secondary_endpoint_type      => 'ANY-VALUE',
+          :django_debug                 => true,
+          :api_result_limit             => 4682,
+          :compress_offline             => false,
+          :hypervisor_options           => {'can_set_mount_point' => false, 'can_set_password' => true },
+          :cinder_options               => {'enable_backup' => true },
+          :neutron_options              => {'enable_lb' => true, 'enable_firewall' => true, 'enable_quotas' => false, 'enable_security_group' => false, 'enable_vpn' => true,
+                                            'enable_distributed_router' => false, 'enable_ha_router' => false, 'profile_support' => 'cisco', },
+          :file_upload_temp_dir         => '/var/spool/horizon',
+          :secure_cookies               => true,
+          :custom_theme_path            => 'static/themes/green',
+          :api_versions                 => {'identity' => 3},
+          :keystone_multidomain_support => true,
+          :keystone_default_domain      => 'domain.tld'
         })
       end
 
@@ -109,16 +128,24 @@ describe 'horizon' do
           "ALLOWED_HOSTS = ['*', ]",
           'CSRF_COOKIE_SECURE = True',
           'SESSION_COOKIE_SECURE = True',
+          "  'identity': 3,",
+          "OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True",
+          "OPENSTACK_KEYSTONE_DEFAULT_DOMAIN = 'domain.tld'",
           "SECRET_KEY = 'elj1IWiLoWHgcyYxFVLj7cM5rGOOxWl0'",
+          "                'DEAD_RETRY': 1,",
+          "                'SERVER_RETRIES': 1,",
+          "                'SOCKET_TIMEOUT': 1,",
+          "        'BACKEND': 'horizon.backends.memcached.HorizonMemcached',",
           "        'LOCATION': '10.0.0.1:11211',",
           'SESSION_ENGINE = "django.contrib.sessions.backends.cache"',
           'OPENSTACK_KEYSTONE_URL = "https://keystone.example.com:4682"',
           'OPENSTACK_KEYSTONE_DEFAULT_ROLE = "SwiftOperator"',
+          'OPENSTACK_SSL_NO_VERIFY = True',
           "    'can_set_mount_point': False,",
           "    'can_set_password': True,",
           "    'enable_backup': True,",
-          "    'enable_lb': True,",
           "    'enable_firewall': True,",
+          "    'enable_lb': True,",
           "    'enable_quotas': False,",
           "    'enable_security_group': False,",
           "    'enable_vpn': True,",
@@ -126,10 +153,11 @@ describe 'horizon' do
           'OPENSTACK_ENDPOINT_TYPE = "internalURL"',
           'SECONDARY_ENDPOINT_TYPE = "ANY-VALUE"',
           'API_RESULT_LIMIT = 4682',
+          "CUSTOM_THEME_PATH = 'static/themes/green'",
           "            'level': 'DEBUG',",
           "            'handlers': ['syslog'],",
           'COMPRESS_OFFLINE = False',
-          "FILE_UPLOAD_TEMP_DIR = '/var/spool/horizon'"
+          "FILE_UPLOAD_TEMP_DIR = '/var/spool/horizon'",
         ])
       end
 
@@ -151,7 +179,13 @@ describe 'horizon' do
         ])
       end
 
-      it { is_expected.to contain_exec('refresh_horizon_django_cache') }
+      it {
+        if facts[:os_package_type] == 'rpm'
+          is_expected.to contain_exec('refresh_horizon_django_cache')
+        else
+          is_expected.to_not contain_exec('refresh_horizon_django_cache')
+        end
+      }
     end
 
     context 'with tuskar-ui enabled' do
@@ -185,13 +219,15 @@ describe 'horizon' do
     context 'with vhost_extra_params' do
       before do
         params.merge!({
-          :vhost_extra_params   => { 'add_listen' => false },
+          :vhost_extra_params => { 'add_listen' => false },
+          :redirect_type      => 'temp',
         })
       end
 
       it 'configures apache' do
         is_expected.to contain_class('horizon::wsgi::apache').with({
-          :extra_params => { 'add_listen' => false },
+          :extra_params  => { 'add_listen' => false },
+          :redirect_type => 'temp',
         })
       end
     end
@@ -314,6 +350,56 @@ describe 'horizon' do
 
       it { is_expected.not_to contain_file(params[:file_upload_temp_dir]) }
     end
+
+    context 'with image_backend' do
+      before do
+        params.merge!({
+          :image_backend => {
+            'image_formats' => {
+              ''      => 'Select image format',
+              'aki'   => 'AKI - Amazon Kernel Image',
+              'ami'   => 'AMI - Amazon Machine Image',
+              'ari'   => 'ARI - Amazon Ramdisk Image',
+              'iso'   => 'ISO - Optical Disk Image',
+              'qcow2' => 'QCOW2 - QEMU Emulator',
+              'raw'   => 'Raw',
+              'vdi'   => 'VDI',
+              'vhi'   => 'VHI',
+              'vmdk'  => 'VMDK',
+            },
+            'architectures' => {
+              ''        => 'Select architecture',
+              'x86_64'  => 'x86-64',
+              'aarch64' => 'ARMv8',
+            },
+          },
+        })
+      end
+
+      it 'configures OPENSTACK_IMAGE_BACKEND' do
+        verify_concat_fragment_contents(catalogue, 'local_settings.py', [
+          "OPENSTACK_IMAGE_BACKEND = {",
+          "    'image_formats': [",
+          "        ('', _('Select image format')),",
+          "        ('aki', _('AKI - Amazon Kernel Image')),",
+          "        ('ami', _('AMI - Amazon Machine Image')),",
+          "        ('ari', _('ARI - Amazon Ramdisk Image')),",
+          "        ('iso', _('ISO - Optical Disk Image')),",
+          "        ('qcow2', _('QCOW2 - QEMU Emulator')),",
+          "        ('raw', _('Raw')),",
+          "        ('vdi', _('VDI')),",
+          "        ('vhi', _('VHI')),",
+          "        ('vmdk', _('VMDK')),",
+          "    ], # image_formats",
+          "    'architectures': [",
+          "        ('', _('Select architecture')),",
+          "        ('x86_64', _('x86-64')),",
+          "        ('aarch64', _('ARMv8')),",
+          "    ], # architectures",
+          "} # OPENSTACK_IMAGE_BACKEND",
+        ])
+      end
+    end
   end
 
   context 'on RedHat platforms' do
@@ -343,7 +429,9 @@ describe 'horizon' do
     before do
       facts.merge!({
         :osfamily               => 'Debian',
-        :operatingsystemrelease => '6.0'
+        :operatingsystem        => 'Debian',
+        :operatingsystemrelease => '6.0',
+        :os_package_type        => 'debian'
       })
     end
 
@@ -361,4 +449,30 @@ describe 'horizon' do
       ])
     end
   end
+
+  context 'on Ubuntu platforms' do
+    before do
+      facts.merge!({
+        :osfamily               => 'Debian',
+        :operatingsystem        => 'Ubuntu',
+        :operatingsystemrelease => '14.04',
+        :os_package_type        => 'ubuntu'
+      })
+    end
+
+    let :platforms_params do
+      { :config_file       => '/etc/openstack-dashboard/local_settings.py',
+        :package_name      => 'openstack-dashboard',
+        :root_url          => '/horizon' }
+    end
+
+    it_behaves_like 'horizon'
+
+    it 'sets WEBROOT in local_settings.py' do
+      verify_concat_fragment_contents(catalogue, 'local_settings.py', [
+        "WEBROOT = '/horizon/'",
+      ])
+    end
+  end
+
 end

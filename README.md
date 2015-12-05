@@ -1,7 +1,7 @@
 horizon
 =======
 
-6.0.0 - 2015.1 - Kilo
+7.0.0 - 2015.2 - Liberty
 
 #### Table of Contents
 
@@ -34,7 +34,7 @@ Setup
 
 ### Installing horizon
 
-    example% puppet module install puppetlabs/horizon
+    example% puppet module install openstack/horizon
 
 ### Beginning with horizon
 
